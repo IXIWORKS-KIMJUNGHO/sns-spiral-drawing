@@ -1,0 +1,60 @@
+# Flutter and Dart
+.dart_tool/
+.packages
+.metadata
+.flutter-plugins
+.flutter-plugins-dependencies
+.pub-cache/
+.pub/
+build/
+ios/.generated/
+ios/Flutter/flutter_export_environment.sh
+android/.gradle/
+android/app/src/main/java/io/flutter/plugins/
+android/captures/
+android/gradlew
+android/gradlew.bat
+android/local.properties
+android/app/src/debug/
+android/app/src/profile/
+android/app/src/release/
+
+# IDE
+.vscode/
+.idea/
+*.iml
+*.ipr
+*.iws
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# Claude Code specific
+.claude/
+
+# Temporary files
+*.tmp
+*.temp
+temp/
+tmp/
+
+# Firebase
+google-services.json
+GoogleService-Info.plist
+firebase_options.dart
+
+# Generated files
+*.g.dart
+*.freezed.dart
+*.mocks.dart
+
+# Coverage
+coverage/
+*.lcov
+
+# Logs
+*.log
+logs/
