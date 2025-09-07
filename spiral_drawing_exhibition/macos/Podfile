@@ -38,10 +38,5 @@ end
 post_install do |installer|
   installer.pods_project.targets.each do |target|
     flutter_additional_macos_build_settings(target)
-    
-    # 모든 Pod의 deployment target을 10.15로 설정하여 경고 해결
-    target.build_configurations.each do |config|
-      config.build_settings['MACOSX_DEPLOYMENT_TARGET'] = '10.15'
-    end
   end
 end

@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
-import 'package:camera_macos/camera_macos.dart';
+import 'package:camera/camera.dart';
 
 /// 카메라 선택 다이얼로그
 /// 
 /// 여러 카메라가 연결된 경우 사용자가 선택할 수 있도록 함
 class CameraSelectorDialog extends StatelessWidget {
-  final List<CameraMacOSDevice> cameras;
+  final List<CameraDescription> cameras;
   
   const CameraSelectorDialog({
     super.key,
@@ -33,10 +33,10 @@ class CameraSelectorDialog extends StatelessWidget {
     );
   }
   
-  Widget _buildCameraOption(BuildContext context, CameraMacOSDevice camera) {
+  Widget _buildCameraOption(BuildContext context, CameraDescription camera) {
     // 카메라 이름과 위치 정보 표시
-    String cameraName = camera.deviceId;
-    String cameraPosition = camera.manufacturer ?? '';
+    String cameraName = camera.name;
+    String cameraPosition = camera.lensDirection.toString();
     
     // macOS에서 일반적인 카메라 이름 매핑
     if (cameraName.contains('FaceTime')) {
@@ -103,7 +103,7 @@ class CameraSelectorDialog extends StatelessWidget {
 
 /// 카메라 정보를 표시하는 위젯
 class CameraInfoWidget extends StatelessWidget {
-  final CameraMacOSDevice? currentCamera;
+  final CameraDescription? currentCamera;
   final VoidCallback onChangeCamera;
   
   const CameraInfoWidget({
@@ -118,7 +118,7 @@ class CameraInfoWidget extends StatelessWidget {
       return const SizedBox.shrink();
     }
     
-    String displayName = currentCamera!.deviceId;
+    String displayName = currentCamera!.name;
     if (displayName.contains('FaceTime')) {
       displayName = '맥북 카메라';
     } else if (displayName.contains('Studio Display')) {
