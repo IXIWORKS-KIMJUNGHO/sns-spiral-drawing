@@ -1,0 +1,318 @@
+// swift-interface-format-version: 1.0
+// swift-compiler-version: Apple Swift version 6.1.2 effective-5.10 (swiftlang-6.1.2.1.2 clang-1700.0.13.5)
+// swift-module-flags: -target arm64-apple-ios9.0 -enable-objc-interop -enable-library-evolution -swift-version 5 -enforce-exclusivity=checked -O -enable-experimental-feature DebugDescriptionMacro -enable-bare-slash-regex -module-name NemonicSdk
+// swift-module-flags-ignorable: -no-verify-emitted-module-interface -interface-compiler-version 6.1.2
+import CoreBluetooth
+import ExternalAccessory
+import Foundation
+@_exported import NemonicSdk
+import Swift
+import UIKit
+import _Concurrency
+import _StringProcessing
+import _SwiftConcurrencyShims
+import os.log
+import os
+@objc(NPrinterScanControllerDelegate) public protocol NPrinterScanControllerDelegate : ObjectiveC.NSObjectProtocol {
+  @objc func deviceFound(_ printer: NemonicSdk.NPrinter)
+}
+@objc(NPrinterType) public enum NPrinterType : Swift.Int {
+  case none = 0
+  case nemonic = 1
+  case nemonicLabel = 2
+  case nemonicMini = 3
+  case nemonicMip201 = 4
+  public var description: Swift.String {
+    get
+  }
+  public var subType: Swift.String {
+    get
+  }
+  public var model: Swift.String {
+    get
+  }
+  public static func getValue(description: Swift.String) -> NemonicSdk.NPrinterType
+  public init?(rawValue: Swift.Int)
+  public typealias RawValue = Swift.Int
+  public var rawValue: Swift.Int {
+    get
+  }
+}
+@objc(NResultPrintable) public class NResultPrintable : ObjectiveC.NSObject {
+  public init(_ result: Swift.Int)
+  public func isPrintable() -> Swift.Bool
+  public func isInError() -> Swift.Bool
+  public func getError() -> Swift.Int
+  public func getErrorByPriority() -> Swift.Int
+  public func isCoverOpened() -> Swift.Bool
+  public func isOutOfPaper() -> Swift.Bool
+  public func isPaperJam() -> Swift.Bool
+  public func isOverheat() -> Swift.Bool
+  public func isPowerCableConnected() -> Swift.Bool
+  public func isInCharging() -> Swift.Bool
+  public func isBatteryLow() -> Swift.Bool
+  public func isCommunicationBle() -> Swift.Bool
+  public func isCommunicationUsb() -> Swift.Bool
+  @objc deinit
+}
+@objc(NResult) public enum NResult : Swift.Int {
+  case ok = 0x00
+  case timeout = -64
+  case canceled = -65
+  case batteryLow = -70
+  case batteryNeedCharge = -71
+  case paperNotMatched = -80
+  case bluetoothUnsupported = -100
+  case bluetoothDisabled = -101
+  case bluetoothNoPermission = -102
+  case bluetoothResetting = -103
+  case canceledOrBluetoothDisabled = -104
+  case bluetoothUnknown = -105
+  case locationNoPermission = -110
+  case locationDisabled = -111
+  case scanFailed = -200
+  case noSelectedPrinter = -300
+  case notConnected = -301
+  case alreadyConnected = -302
+  case notFound = -303
+  case notConnectable = -304
+  case socketError = -305
+  case connectError = -306
+  case connectFailed = -307
+  case sessionError = -308
+  case connectServiceNotFound = -309
+  case connectUnsupportedMode = -310
+  case ioReceiveError = -400
+  case ioSendError = -401
+  case sendFailed = -402
+  case unknown = -500
+  case invalidParameter = -501
+  case notMatchedPrinterType = -502
+  case noDelegate = -503
+  case notMatchedCommandResultFormat = -504
+  case invalidPrinterName = -505
+  case invalidPrinterResult = -506
+  case printerResultFailed = -507
+  case unsupportedDevice = -508
+  public init?(rawValue: Swift.Int)
+  public typealias RawValue = Swift.Int
+  public var rawValue: Swift.Int {
+    get
+  }
+}
+@_inheritsConvenienceInitializers @objc(NPrinterController) public class NPrinterController : ObjectiveC.NSObject {
+  public static let defaultWaitTime: Swift.Int
+  @objc override dynamic public init()
+  @objc public init(_ delegate: any NemonicSdk.NPrinterControllerDelegate)
+  @objc public func getDefaultConnectDelay() -> Swift.UInt32
+  @objc public func getConnectDelay() -> Swift.UInt32
+  @objc public func setConnectDelay(_ delay: Swift.UInt32)
+  @objc public func connect(_ printer: NemonicSdk.NPrinter, queueLabel: Swift.String? = nil) -> Swift.Int
+  public func disconnect()
+  public func getConnectState() -> Swift.Int
+  public func cancel()
+  public func setPrintTimeout(_ enableAuto: Swift.Bool, _ manualTime: Swift.Int)
+  public func print(_ printInfo: NemonicSdk.NPrintInfo) -> Swift.Int
+  public func setTemplate(_ image: UIKit.UIImage, withPrint: Swift.Bool, enableDither: Swift.Bool) -> Swift.Int
+  public func clearTemplate() -> Swift.Int
+  public func getPrinterStatus() -> Swift.Int
+  public func getCartridgeType() -> Swift.Int
+  public func getPrinterName() -> NemonicSdk.NResultString
+  public func getBatteryLevel() -> Swift.Int
+  public func getBatteryStatus() -> Swift.Int
+  @objc deinit
+}
+@objc(NPrinterStatus) public enum NPrinterStatus : Swift.Int {
+  case ok = 0
+  case outOfPaper = 2
+  case coverOpened = 4
+  case overheat = 8
+  case paperJam = 16
+  public init?(rawValue: Swift.Int)
+  public typealias RawValue = Swift.Int
+  public var rawValue: Swift.Int {
+    get
+  }
+}
+@_inheritsConvenienceInitializers @objc(NResultString) public class NResultString : ObjectiveC.NSObject {
+  @objc override dynamic public init()
+  public init(_ result: Swift.Int)
+  public init(_ result: Swift.Int, _ value: Swift.String)
+  public func getResult() -> Swift.Int
+  public func getValue() -> Swift.String
+  @objc deinit
+}
+@objc(NBatteryStatus) public enum NBatteryStatus : Swift.Int {
+  case noCharging = 0
+  case lowNoCharging = 1
+  case charging = 2
+  case lowCharging = 3
+  public init?(rawValue: Swift.Int)
+  public typealias RawValue = Swift.Int
+  public var rawValue: Swift.Int {
+    get
+  }
+}
+@_inheritsConvenienceInitializers @objc(NPrinter) public class NPrinter : ObjectiveC.NSObject {
+  @objc override dynamic public init()
+  @objc public init(name: Swift.String, macAddress: Swift.String)
+  @objc public init(type: NemonicSdk.NPrinterType, name: Swift.String, macAddress: Swift.String)
+  @objc public func isEmpty() -> Swift.Bool
+  @objc public func isValid() -> Swift.Bool
+  @objc public func reset()
+  @objc public func getName() -> Swift.String
+  @objc public func setName(_ name: Swift.String)
+  @objc public func checkName(_ name: Swift.String) -> Swift.Bool
+  @objc public static func checkName(type: NemonicSdk.NPrinterType, name: Swift.String) -> Swift.Bool
+  @objc public static func checkNameWithoutCartridgeType(type: NemonicSdk.NPrinterType, name: Swift.String) -> Swift.Bool
+  @objc public func getMacAddress() -> Swift.String
+  @objc public func setMacAddress(_ macAddress: Swift.String) -> Swift.Bool
+  @objc public func checkMacAddress(_ macAddress: Swift.String) -> Swift.Bool
+  @objc public func getType() -> NemonicSdk.NPrinterType
+  @objc public func setType(_ type: NemonicSdk.NPrinterType)
+  @objc public func isLabel() -> Swift.Bool
+  @objc public func isMini() -> Swift.Bool
+  @objc public func isFixedPaperSize() -> Swift.Bool
+  @objc public func isSupportedBattery() -> Swift.Bool
+  @objc public func isSupportedPassword() -> Swift.Bool
+  public func setCartridgeType(_ type: NemonicSdk.NCartridgeType)
+  @objc public func getCartridgeType() -> NemonicSdk.NCartridgeType
+  @objc public func getWaitTimeForPrint(_ height: Swift.Int, _ copies: Swift.Int) -> Swift.Int
+  @objc override dynamic public func isEqual(_ object: Any?) -> Swift.Bool
+  @objc override dynamic public var description: Swift.String {
+    @objc get
+  }
+  @objc deinit
+}
+@objc(NPrintQuality) public enum NPrintQuality : Swift.Int {
+  case lowFast = 0
+  case middle = 1
+  case highSlow = 2
+  public init?(rawValue: Swift.Int)
+  public typealias RawValue = Swift.Int
+  public var rawValue: Swift.Int {
+    get
+  }
+}
+@_inheritsConvenienceInitializers @objc(NPrintImageLength) public class NPrintImageLength : ObjectiveC.NSObject {
+  @objc public static let printWidth: Swift.Int
+  @objc public static let maxLength: Swift.Int
+  @objc public static let maxLengthMip201: Swift.Int
+  @objc public static let maxTemplateLength: Swift.Int
+  @objc public static let maxTemplateLengthMip201: Swift.Int
+  @objc public static let content1inch: Swift.Int
+  @objc public static let content2inch: Swift.Int
+  @objc public static let content3inch: Swift.Int
+  @objc public static let content4inch: Swift.Int
+  @objc override dynamic public init()
+  @objc deinit
+}
+@objc(NConnectState) public enum NConnectState : Swift.Int {
+  case disconnected = 0x00
+  case connecting = 0x01
+  case connected = 0x02
+  case disconnecting = 0x03
+  public init?(rawValue: Swift.Int)
+  public typealias RawValue = Swift.Int
+  public var rawValue: Swift.Int {
+    get
+  }
+}
+@objc(NPrinterScanController) public class NPrinterScanController : ObjectiveC.NSObject {
+  @objc public var delegate: (any NemonicSdk.NPrinterScanControllerDelegate)?
+  @objc public init(_ delegate: any NemonicSdk.NPrinterScanControllerDelegate)
+  @objc public func startScan() -> Swift.Int
+  @objc public func stopScan()
+  @objc public func isInScan() -> Swift.Bool
+  @objc deinit
+}
+@objc public class NPrintInfo : ObjectiveC.NSObject {
+  public init(printer: NemonicSdk.NPrinter, image: UIKit.UIImage)
+  public init(printer: NemonicSdk.NPrinter, images: [UIKit.UIImage])
+  public func isEmpty() -> Swift.Bool
+  public func setPrinter(_ printer: NemonicSdk.NPrinter) -> NemonicSdk.NPrintInfo
+  public func getPrinter() -> NemonicSdk.NPrinter
+  public func setPrintQuality(_ quality: NemonicSdk.NPrintQuality) -> NemonicSdk.NPrintInfo
+  public func getPrintQuality() -> NemonicSdk.NPrintQuality
+  public func setImage(_ image: UIKit.UIImage) -> NemonicSdk.NPrintInfo
+  public func getImage() -> UIKit.UIImage?
+  public func setImages(_ images: [UIKit.UIImage]) -> NemonicSdk.NPrintInfo
+  public func getImages() -> [UIKit.UIImage]
+  public func isPrintableImages() -> Swift.Bool
+  public func setCopies(_ copies: Swift.Int) -> NemonicSdk.NPrintInfo
+  public func getCopies() -> Swift.Int
+  public func setEnableLastPageCut(_ enable: Swift.Bool) -> NemonicSdk.NPrintInfo
+  public func isLastPageCutEnable() -> Swift.Bool
+  public func setEnableDither(_ enable: Swift.Bool) -> NemonicSdk.NPrintInfo
+  public func isEnableDither() -> Swift.Bool
+  public func setEnableCheckPrinterStatus(_ enable: Swift.Bool) -> NemonicSdk.NPrintInfo
+  public func isCheckPrinterStatus() -> Swift.Bool
+  public func setEnableCheckCartridgeType(_ enable: Swift.Bool) -> NemonicSdk.NPrintInfo
+  public func isCheckCartridgeType() -> Swift.Bool
+  public func setEnableCheckPower(_ enable: Swift.Bool) -> NemonicSdk.NPrintInfo
+  public func isCheckPower() -> Swift.Bool
+  public func getPrintImage() -> UIKit.UIImage?
+  public func getPrintImages() -> [UIKit.UIImage]?
+  @objc override dynamic public var description: Swift.String {
+    @objc get
+  }
+  @objc deinit
+}
+@_inheritsConvenienceInitializers @objc(SDKInfo) public class NSDKInfo : ObjectiveC.NSObject {
+  public static let bundleName: Swift.String
+  public static let bundleVersion: Swift.Int
+  @objc override dynamic public init()
+  @objc deinit
+}
+@objc(NPrinterControllerDelegate) public protocol NPrinterControllerDelegate : ObjectiveC.NSObjectProtocol {
+  @objc func disconnected()
+  @objc func printProgress(index: Swift.Int, total: Swift.Int, result: Swift.Int)
+  @objc func printComplete(result: Swift.Int)
+}
+@objc(NCartridgeType) public enum NCartridgeType : Swift.Int {
+  case none = -1
+  case white = 0
+  case yellow = 1
+  case green = 2
+  case blue = 3
+  case pink = 7
+  case l1 = 13
+  case l2 = 12
+  case l3 = 10
+  case l4 = 6
+  case m1 = 101
+  case m2 = 102
+  case m3 = 103
+  case m4 = 104
+  public var rawValueOrigin: Swift.Int {
+    get
+  }
+  public static func valueOf(_ value: Swift.Int) -> NemonicSdk.NCartridgeType
+  public static func stringNameOf(type: NemonicSdk.NCartridgeType, isMini: Swift.Bool) -> Swift.String
+  public init?(rawValue: Swift.Int)
+  public typealias RawValue = Swift.Int
+  public var rawValue: Swift.Int {
+    get
+  }
+}
+extension NemonicSdk.NPrinterType : Swift.Equatable {}
+extension NemonicSdk.NPrinterType : Swift.Hashable {}
+extension NemonicSdk.NPrinterType : Swift.RawRepresentable {}
+extension NemonicSdk.NResult : Swift.Equatable {}
+extension NemonicSdk.NResult : Swift.Hashable {}
+extension NemonicSdk.NResult : Swift.RawRepresentable {}
+extension NemonicSdk.NPrinterStatus : Swift.Equatable {}
+extension NemonicSdk.NPrinterStatus : Swift.Hashable {}
+extension NemonicSdk.NPrinterStatus : Swift.RawRepresentable {}
+extension NemonicSdk.NBatteryStatus : Swift.Equatable {}
+extension NemonicSdk.NBatteryStatus : Swift.Hashable {}
+extension NemonicSdk.NBatteryStatus : Swift.RawRepresentable {}
+extension NemonicSdk.NPrintQuality : Swift.Equatable {}
+extension NemonicSdk.NPrintQuality : Swift.Hashable {}
+extension NemonicSdk.NPrintQuality : Swift.RawRepresentable {}
+extension NemonicSdk.NConnectState : Swift.Equatable {}
+extension NemonicSdk.NConnectState : Swift.Hashable {}
+extension NemonicSdk.NConnectState : Swift.RawRepresentable {}
+extension NemonicSdk.NCartridgeType : Swift.Equatable {}
+extension NemonicSdk.NCartridgeType : Swift.Hashable {}
+extension NemonicSdk.NCartridgeType : Swift.RawRepresentable {}
