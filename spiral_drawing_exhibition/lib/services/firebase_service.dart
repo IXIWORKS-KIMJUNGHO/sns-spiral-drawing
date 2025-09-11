@@ -2,6 +2,7 @@ import 'dart:math';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
+import '../utils/logger_service.dart';
 
 /// Firebase Storage 서비스
 /// 이미지 업로드 및 URL 생성 담당
@@ -14,7 +15,7 @@ class FirebaseService {
   FirebaseStorage? get _storage {
     if (kIsWeb) {
       if (kDebugMode) {
-        print('🌐 웹 환경에서는 Firebase Storage를 사용할 수 없습니다.');
+        LoggerService.w('🌐 웹 환경에서는 Firebase Storage를 사용할 수 없습니다.');
       }
       return null;
     }
@@ -29,7 +30,7 @@ class FirebaseService {
     // 웹 환경에서는 Firebase 사용 불가
     if (kIsWeb) {
       if (kDebugMode) {
-        print('🌐 웹 환경에서는 Firebase Storage를 사용할 수 없습니다. 로컬 저장소 사용.');
+        LoggerService.w('🌐 웹 환경에서는 Firebase Storage를 사용할 수 없습니다. 로컬 저장소 사용.');
       }
       // 웹 환경에서는 임시 데이터 반환
       final now = DateTime.now();
@@ -53,9 +54,9 @@ class FirebaseService {
       final user = FirebaseAuth.instance.currentUser;
       if (kDebugMode) {
         if (user != null) {
-          print('Firebase 인증 상태: 로그인됨 (UID: ${user.uid})');
+          LoggerService.i('Firebase 인증 상태: 로그인됨 (UID: ${user.uid})');
         } else {
-          print('Firebase 인증 상태: 비로그인 (익명 업로드 시도)');
+          LoggerService.i('Firebase 인증 상태: 비로그인 (익명 업로드 시도)');
         }
       }
       // 현재 시간 기반 파일명 생성
@@ -77,7 +78,7 @@ class FirebaseService {
           .child(fileName);
       
       if (kDebugMode) {
-        print('Firebase Storage 업로드 시작: artworks/$year/$month/$fileName');
+        LoggerService.i('Firebase Storage 업로드 시작: artworks/$year/$month/$fileName');
       }
       
       // 메타데이터 설정 (최적화: 필수 항목만)
@@ -97,7 +98,7 @@ class FirebaseService {
         uploadTask.snapshotEvents.listen((TaskSnapshot snapshot) {
           final progress = ((snapshot.bytesTransferred / snapshot.totalBytes) * 100).round();
           if (progress >= lastLoggedProgress + 25) { // 25% 단위로만 로깅
-            print('📤 업로드 진행: ${progress}%');
+            LoggerService.d('📤 업로드 진행: ${progress}%');
             lastLoggedProgress = progress;
           }
         });
@@ -110,8 +111,8 @@ class FirebaseService {
       final downloadUrl = await snapshot.ref.getDownloadURL();
       
       if (kDebugMode) {
-        print('Firebase Storage 업로드 완료!');
-        print('URL: $downloadUrl');
+        LoggerService.i('Firebase Storage 업로드 완료!');
+        LoggerService.i('URL: $downloadUrl');
       }
       
       // 결과 반환
@@ -124,7 +125,7 @@ class FirebaseService {
       
     } catch (e) {
       if (kDebugMode) {
-        print('Firebase Storage 업로드 실패: $e');
+        LoggerService.e('Firebase Storage 업로드 실패: $e');
       }
       throw Exception('이미지 업로드 실패: $e');
     }
@@ -134,7 +135,7 @@ class FirebaseService {
   Future<void> deleteArtwork(String path) async {
     if (kIsWeb) {
       if (kDebugMode) {
-        print('🌐 웹 환경에서는 이미지 삭제를 지원하지 않습니다.');
+        LoggerService.w('🌐 웹 환경에서는 이미지 삭제를 지원하지 않습니다.');
       }
       return;
     }
@@ -146,11 +147,11 @@ class FirebaseService {
       final ref = storage.ref().child(path);
       await ref.delete();
       if (kDebugMode) {
-        print('이미지 삭제 완료: $path');
+        LoggerService.i('이미지 삭제 완료: $path');
       }
     } catch (e) {
       if (kDebugMode) {
-        print('이미지 삭제 실패: $e');
+        LoggerService.e('이미지 삭제 실패: $e');
       }
     }
   }
@@ -159,7 +160,7 @@ class FirebaseService {
   Future<List<String>> listArtworks(int year, int month) async {
     if (kIsWeb) {
       if (kDebugMode) {
-        print('🌐 웹 환경에서는 작품 목록 조회를 지원하지 않습니다.');
+        LoggerService.w('🌐 웹 환경에서는 작품 목록 조회를 지원하지 않습니다.');
       }
       return [];
     }
@@ -185,7 +186,7 @@ class FirebaseService {
       return urls;
     } catch (e) {
       if (kDebugMode) {
-        print('작품 목록 가져오기 실패: $e');
+        LoggerService.e('작품 목록 가져오기 실패: $e');
       }
       return [];
     }

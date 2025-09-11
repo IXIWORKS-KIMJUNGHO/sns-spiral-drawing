@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:nemonic_sdk/n_printer.dart';
+import '../utils/logger_service.dart';
 
 /// 앱 설정 관리 서비스
 /// 카메라 및 프린터 설정을 영구 저장하여 재실행 시 자동 로드
@@ -23,7 +24,7 @@ class SettingsService {
       return prefs.getBool(_keyIsFirstRun) ?? true;
     } catch (e) {
       if (kDebugMode) {
-        print('❌ 첫 실행 확인 오류: $e');
+        LoggerService.e('❌ 첫 실행 확인 오류: $e');
       }
       return true; // 오류 시 첫 실행으로 처리
     }
@@ -62,21 +63,21 @@ class SettingsService {
       }
       
       if (kDebugMode) {
-        print('✅ 설정 저장 완료');
-        print('📷 카메라: $selectedCamera');
+        LoggerService.i('✅ 설정 저장 완료');
+        LoggerService.i('📷 카메라: $selectedCamera');
         if (selectedPrinter != null) {
-          print('🖨️ 프린터: ${selectedPrinter.getName()} (${selectedPrinter.getMacAddress()})');
+          LoggerService.i('🖨️ 프린터: ${selectedPrinter.getName()} (${selectedPrinter.getMacAddress()})');
         } else {
-          print('🖨️ 프린터: 선택하지 않음');
+          LoggerService.i('🖨️ 프린터: 선택하지 않음');
         }
         if (drawingDuration != null) {
-          print('⏱️ 드로잉 시간: ${drawingDuration}초');
+          LoggerService.i('⏱️ 드로잉 시간: ${drawingDuration}초');
         }
       }
       
     } catch (e) {
       if (kDebugMode) {
-        print('❌ 설정 저장 오류: $e');
+        LoggerService.e('❌ 설정 저장 오류: $e');
       }
       rethrow;
     }
@@ -90,7 +91,7 @@ class SettingsService {
       return prefs.getString(_keySelectedCamera);
     } catch (e) {
       if (kDebugMode) {
-        print('❌ 카메라 설정 로드 오류: $e');
+        LoggerService.e('❌ 카메라 설정 로드 오류: $e');
       }
       return null;
     }
@@ -116,14 +117,14 @@ class SettingsService {
       // Note: NPrinterType enum 값으로 타입 설정 필요
       
       if (kDebugMode) {
-        print('📱 저장된 프린터 로드: $name ($mac)');
+        LoggerService.i('📱 저장된 프린터 로드: $name ($mac)');
       }
       
       return printer;
       
     } catch (e) {
       if (kDebugMode) {
-        print('❌ 프린터 설정 로드 오류: $e');
+        LoggerService.e('❌ 프린터 설정 로드 오류: $e');
       }
       return null;
     }
@@ -136,7 +137,7 @@ class SettingsService {
       return prefs.getInt(_keyDrawingDuration) ?? 45; // 기본값 45초
     } catch (e) {
       if (kDebugMode) {
-        print('❌ 드로잉 지속 시간 로드 오류: $e');
+        LoggerService.e('❌ 드로잉 지속 시간 로드 오류: $e');
       }
       return 45; // 오류 시 기본값
     }
@@ -149,12 +150,12 @@ class SettingsService {
       await prefs.clear();
       
       if (kDebugMode) {
-        print('🔄 설정 초기화 완료');
+        LoggerService.i('🔄 설정 초기화 완료');
       }
       
     } catch (e) {
       if (kDebugMode) {
-        print('❌ 설정 초기화 오류: $e');
+        LoggerService.e('❌ 설정 초기화 오류: $e');
       }
     }
   }
@@ -169,15 +170,15 @@ class SettingsService {
       final printer = await getSavedPrinter();
       final duration = await getSavedDrawingDuration();
       
-      print('=== 설정 상태 ===');
-      print('첫 실행: $isFirst');
-      print('카메라: $camera');
-      print('프린터: ${printer?.getName()} (${printer?.getMacAddress()})');
-      print('드로잉 시간: ${duration}초');
-      print('================');
+      LoggerService.i('=== 설정 상태 ===');
+      LoggerService.i('첫 실행: $isFirst');
+      LoggerService.i('카메라: $camera');
+      LoggerService.i('프린터: ${printer?.getName()} (${printer?.getMacAddress()})');
+      LoggerService.i('드로잉 시간: ${duration}초');
+      LoggerService.i('================');
       
     } catch (e) {
-      print('❌ 설정 상태 확인 오류: $e');
+      LoggerService.e('❌ 설정 상태 확인 오류: $e');
     }
   }
 }

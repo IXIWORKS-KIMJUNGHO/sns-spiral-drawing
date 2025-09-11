@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/scheduler.dart';
+import 'package:flutter/services.dart';
 import 'package:camera/camera.dart';
 import 'package:provider/provider.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -26,8 +27,7 @@ class CameraScreen extends StatefulWidget {
   State<CameraScreen> createState() => _CameraScreenState();
 }
 
-class _CameraScreenState extends State<CameraScreen> with SingleTickerProviderStateMixin {
-  final GlobalKey _cameraKey = GlobalKey(debugLabel: "cameraKey");
+class _CameraScreenState extends State<CameraScreen> with SingleTickerProviderStateMixin, WidgetsBindingObserver {
   CameraController? _controller;
   List<CameraDescription>? _cameras;
   CameraDescription? _selectedCamera;
@@ -39,6 +39,15 @@ class _CameraScreenState extends State<CameraScreen> with SingleTickerProviderSt
   
   // 이전 세션의 카메라 정보를 저장 (앱이 실행되는 동안 유지)
   static String? _lastUsedDeviceId;
+  
+  // 줌 설정
+  final double _currentZoomLevel = 1.5; // 1.5배 기본 줌으로 왜곡 감소
+  
+  // 셀프 타이머
+  bool _isTimerActive = false;
+  int _timerSeconds = 5;
+  Timer? _captureTimer;
+  Timer? _debounceTimer;
   
   // 애니메이션 컨트롤러
   AnimationController? _pulseController;
@@ -60,6 +69,9 @@ class _CameraScreenState extends State<CameraScreen> with SingleTickerProviderSt
     });
     
     _initializeCamera();
+    
+    // 앱 라이프사이클 감지를 위한 옵저버 등록
+    WidgetsBinding.instance.addObserver(this);
     
     // 펄스 애니메이션 초기화
     _pulseController = AnimationController(
@@ -197,11 +209,15 @@ class _CameraScreenState extends State<CameraScreen> with SingleTickerProviderSt
       // 컨트롤러 초기화
       await _controller!.initialize();
       
+      // 줌 레벨 설정 (왜곡 감소를 위한 1.5배 줌)
+      await _applyZoomSettings();
+      
       if (mounted) {
         setState(() {
           _isInitialized = true;
         });
         if (kDebugMode) { print('카메라 컨트롤러 초기화 완료: ${_selectedCamera!.name}'); }
+        if (kDebugMode) { print('줌 레벨 설정: ${_currentZoomLevel}x (왜곡 감소 목적)'); }
       }
     } catch (e) {
       if (kDebugMode) { print('카메라 컨트롤러 초기화 실패: $e'); }
@@ -209,6 +225,29 @@ class _CameraScreenState extends State<CameraScreen> with SingleTickerProviderSt
     }
   }
   
+  /// 줌 설정 적용
+  Future<void> _applyZoomSettings() async {
+    if (_controller == null || !_controller!.value.isInitialized) return;
+    
+    try {
+      // 카메라가 지원하는 줌 범위 확인
+      final maxZoom = await _controller!.getMaxZoomLevel();
+      final minZoom = await _controller!.getMinZoomLevel();
+      
+      // 안전한 줌 레벨 설정
+      final safeZoomLevel = _currentZoomLevel.clamp(minZoom, maxZoom);
+      
+      await _controller!.setZoomLevel(safeZoomLevel);
+      
+      if (kDebugMode) {
+        print('📷 줌 설정 완료: ${safeZoomLevel}x (최소: $minZoom, 최대: $maxZoom)');
+        print('🎯 목적: 광각 렌즈 왜곡 감소');
+      }
+    } catch (e) {
+      if (kDebugMode) { print('❌ 줌 설정 실패: $e'); }
+    }
+  }
+
   /// 카메라 변경
   Future<void> _changeCamera() async {
     setState(() {
@@ -218,10 +257,50 @@ class _CameraScreenState extends State<CameraScreen> with SingleTickerProviderSt
     await _showCameraSelector();
   }
   
-  /// 사진 촬영
-  /// Processing: capture.read()와 유사
-  Future<void> _capturePhoto() async {
+  /// 셀프 타이머 시작 (5초 카운트다운)
+  void _startSelfTimer() {
+    if (_controller == null || !_isInitialized || _isTimerActive) {
+      return;
+    }
+    
+    // 디바운싱: 연속 클릭 방지
+    _debounceTimer?.cancel();
+    _debounceTimer = Timer(const Duration(milliseconds: 300), () {
+      if (!mounted) return;
+      
+      setState(() {
+        _isTimerActive = true;
+        _timerSeconds = 5;
+      });
+      
+      if (kDebugMode) { print('🕒 셀프 타이머 시작: $_timerSeconds초'); }
+      
+      // 1초마다 카운트다운
+      _captureTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+        if (!mounted) {
+          timer.cancel();
+          return;
+        }
+        
+        setState(() {
+          _timerSeconds--;
+        });
+        
+        if (kDebugMode) { print('⏰ 카운트다운: $_timerSeconds'); }
+        
+        // 타이머 완료 시 사진 촬영
+        if (_timerSeconds <= 0) {
+          timer.cancel();
+          _executeCameraCapture();
+        }
+      });
+    });
+  }
+  
+  /// 실제 사진 촬영 실행
+  Future<void> _executeCameraCapture() async {
     if (_controller == null || !_isInitialized) {
+      _resetTimer();
       return;
     }
     
@@ -230,24 +309,45 @@ class _CameraScreenState extends State<CameraScreen> with SingleTickerProviderSt
     });
     
     try {
+      if (kDebugMode) { print('📸 사진 촬영 실행'); }
+      
       // 사진 촬영
       final XFile photo = await _controller!.takePicture();
       
       setState(() {
         _capturedImage = photo;
-        _isCapturing = false;
         _userInitiatedDrawing = true;  // 사용자가 직접 시작한 드로잉으로 표시
       });
+      
+      if (kDebugMode) { print('✅ 사진 촬영 완료'); }
       
       // 바로 드로잉 화면으로 이동
       _navigateToDrawing();
       
     } catch (e) {
+      if (kDebugMode) { print('❌ 사진 촬영 실패: $e'); }
+      _showError('사진 촬영 실패: $e');
+    } finally {
+      _resetTimer();
       setState(() {
         _isCapturing = false;
       });
-      _showError('사진 촬영 실패: $e');
     }
+  }
+  
+  /// 타이머 취소 및 리셋
+  void _cancelTimer() {
+    _captureTimer?.cancel();
+    _resetTimer();
+    if (kDebugMode) { print('🚫 타이머 취소됨'); }
+  }
+  
+  /// 타이머 상태 리셋
+  void _resetTimer() {
+    setState(() {
+      _isTimerActive = false;
+      _timerSeconds = 5;
+    });
   }
   
   /// 드로잉 화면으로 이동
@@ -269,8 +369,8 @@ class _CameraScreenState extends State<CameraScreen> with SingleTickerProviderSt
       
       if (!mounted) return;
       
-      // DrawingScreen으로 이동하면서 보정된 이미지 전달
-      Navigator.of(context).pushReplacement(
+      // DrawingScreen으로 이동하면서 보정된 이미지 전달 (push 사용으로 카메라 상태 보존)
+      Navigator.of(context).push(
         MaterialPageRoute(
           builder: (context) => DrawingScreenWithImage(
             image: correctedImage,
@@ -492,6 +592,7 @@ class _CameraScreenState extends State<CameraScreen> with SingleTickerProviderSt
                           child: CameraInfoWidget(
                             currentCamera: _selectedCamera,
                             onChangeCamera: _changeCamera,
+                            zoomLevel: _currentZoomLevel,
                           ),
                         ),
                       ),
@@ -540,7 +641,7 @@ class _CameraScreenState extends State<CameraScreen> with SingleTickerProviderSt
                                 ),
                               // 메인 버튼
                               GestureDetector(
-                                onTap: _isInitialized && !_isCapturing ? _capturePhoto : null,
+                                onTap: _isInitialized && !_isCapturing && !_isTimerActive ? _startSelfTimer : null,
                                 child: Stack(
                                   alignment: Alignment.center,
                                   children: [
@@ -638,7 +739,7 @@ class _CameraScreenState extends State<CameraScreen> with SingleTickerProviderSt
                         children: [
                           // 메인 버튼 (애니메이션 없이)
                           GestureDetector(
-                            onTap: _isInitialized && !_isCapturing ? _capturePhoto : null,
+                            onTap: _isInitialized && !_isCapturing && !_isTimerActive ? _startSelfTimer : null,
                             child: Stack(
                               alignment: Alignment.center,
                               children: [
@@ -729,6 +830,65 @@ class _CameraScreenState extends State<CameraScreen> with SingleTickerProviderSt
                 ),
               ),
               
+              // 타이머 카운트다운 오버레이
+              if (_isTimerActive)
+                Center(
+                  child: Container(
+                    width: squareSize * 0.25,
+                    height: squareSize * 0.25,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: Colors.black.withValues(alpha: 0.8),
+                      border: Border.all(
+                        color: Colors.red,
+                        width: 4,
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.red.withValues(alpha: 0.3),
+                          blurRadius: 20,
+                          spreadRadius: 5,
+                        ),
+                      ],
+                    ),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Text(
+                          '$_timerSeconds',
+                          style: TextStyle(
+                            fontSize: squareSize * 0.08,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                          ),
+                        ),
+                        GestureDetector(
+                          onTap: _cancelTimer,
+                          child: Container(
+                            margin: EdgeInsets.only(top: squareSize * 0.02),
+                            padding: EdgeInsets.symmetric(
+                              horizontal: squareSize * 0.015,
+                              vertical: squareSize * 0.005,
+                            ),
+                            decoration: BoxDecoration(
+                              color: Colors.red.withValues(alpha: 0.8),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Text(
+                              '취소',
+                              style: TextStyle(
+                                fontSize: squareSize * 0.02,
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              
               // 설정 버튼 (리퀴드 글래스 디자인)
               PositionedSettingsButton(
                 top: squareSize * 0.04,
@@ -750,9 +910,67 @@ class _CameraScreenState extends State<CameraScreen> with SingleTickerProviderSt
   
   @override
   void dispose() {
+    // 타이머 정리
+    _captureTimer?.cancel();
+    _debounceTimer?.cancel();
+    
+    // 앱 라이프사이클 옵저버 제거
+    WidgetsBinding.instance.removeObserver(this);
+    
+    // 애니메이션 및 카메라 컨트롤러 정리
     _pulseController?.dispose();
     _controller?.dispose();
     super.dispose();
+  }
+  
+  /// 앱 라이프사이클 변경 감지
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+    
+    // 카메라 컨트롤러가 없으면 처리하지 않음
+    if (_controller == null || !_controller!.value.isInitialized) {
+      return;
+    }
+    
+    switch (state) {
+      case AppLifecycleState.paused:
+        // 앱이 백그라운드로 갈 때 카메라 일시 정지
+        if (kDebugMode) { print('🔄 앱 백그라운드: 카메라 일시 정지'); }
+        break;
+        
+      case AppLifecycleState.resumed:
+        // 앱이 다시 활성화될 때 카메라 상태 확인 및 복구
+        if (kDebugMode) { print('🔄 앱 포그라운드: 카메라 상태 확인'); }
+        _checkAndRecoverCamera();
+        break;
+        
+      case AppLifecycleState.detached:
+      case AppLifecycleState.inactive:
+      case AppLifecycleState.hidden:
+        // 다른 상태들은 특별한 처리 없음
+        break;
+    }
+  }
+  
+  /// 카메라 상태 확인 및 복구
+  Future<void> _checkAndRecoverCamera() async {
+    if (!mounted) return;
+    
+    try {
+      // 카메라 컨트롤러가 여전히 초기화되어 있는지 확인
+      if (_controller != null && _controller!.value.isInitialized) {
+        // 줌 레벨 재적용 (QR 화면에서 돌아온 후 복구)
+        await _applyZoomSettings();
+        if (kDebugMode) { print('✅ 카메라 상태 정상: 줌 레벨 재적용 완료'); }
+      } else {
+        // 카메라가 비정상 상태면 재초기화
+        if (kDebugMode) { print('⚠️ 카메라 상태 이상: 재초기화 필요'); }
+        await _initializeCameraController();
+      }
+    } catch (e) {
+      if (kDebugMode) { print('❌ 카메라 복구 실패: $e'); }
+    }
   }
   
   /// 이미지를 정사각형으로 크롭 (중앙 부분 추출)
@@ -889,6 +1107,9 @@ class _DrawingScreenWithImageState extends State<DrawingScreenWithImage>
   // Provider 참조를 안전하게 저장
   DrawingProvider? _drawingProvider;
   
+  // 워터마크 이미지
+  ui.Image? _watermarkImage;
+  
   // 🔧 스마트 로깅을 위한 이전 상태 저장
   double _lastLoggedProgress = -1;
   bool _lastLoggedIsDrawing = false;
@@ -903,6 +1124,9 @@ class _DrawingScreenWithImageState extends State<DrawingScreenWithImage>
     // 🔒 위젯 초기화 시 처리 상태 리셋 (앱 재시작 시 안전장치)
     _isProcessing = false;
     
+    // 워터마크 이미지 로드
+    _loadWatermarkImage();
+    
     // 사용자가 직접 시작한 경우에만 드로잉 시작
     if (widget.userInitiated) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -911,6 +1135,26 @@ class _DrawingScreenWithImageState extends State<DrawingScreenWithImage>
     } else {
       if (kDebugMode) { 
         print('DrawingScreenWithImage: 사용자가 직접 시작하지 않은 드로잉이므로 자동 시작하지 않음'); 
+      }
+    }
+  }
+  
+  /// 워터마크 이미지 로드
+  Future<void> _loadWatermarkImage() async {
+    try {
+      final ByteData data = await rootBundle.load('assets/images/watermark.png');
+      final Uint8List bytes = data.buffer.asUint8List();
+      final ui.Codec codec = await ui.instantiateImageCodec(bytes);
+      final ui.FrameInfo fi = await codec.getNextFrame();
+      setState(() {
+        _watermarkImage = fi.image;
+      });
+      if (kDebugMode) {
+        print('🏷️ 워터마크 이미지 로드 완료: ${fi.image.width}x${fi.image.height}');
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        print('❌ 워터마크 이미지 로드 실패: $e');
       }
     }
   }
@@ -1056,14 +1300,17 @@ class _DrawingScreenWithImageState extends State<DrawingScreenWithImage>
               // 짧은 지연 후 네비게이션 (사용자 제스처와 충돌 방지)
               Future.delayed(const Duration(milliseconds: 300), () {
                 if (mounted && context.mounted) { // context.mounted 추가 확인
-                  Navigator.pushReplacement(
+                  // pushReplacement 대신 push 사용으로 카메라 상태 보존
+                  Navigator.push(
                     context,
                     MaterialPageRoute(
                       builder: (_) => QRDisplayScreen(
                         imageUrl: result['url']!,
                         artworkId: result['artworkId']!,
-                        // onComplete 콜백 제거 - QR 화면에서 직접 처리
+                        // onComplete 콜백으로 카메라 복귀 처리
+                        onComplete: () => Navigator.of(context).pop(),
                       ),
+                      settings: const RouteSettings(name: '/qr'),
                     ),
                   );
                 }
@@ -1118,57 +1365,45 @@ class _DrawingScreenWithImageState extends State<DrawingScreenWithImage>
     }
   }
   
-  /// 🏷️ 워터마크 추가 (오른쪽 하단 코너에 텍스트)
+  /// 🏷️ 워터마크 추가 (이미지 기반)
   void _addWatermark(Canvas canvas, double width, double height) {
-    // 현재 날짜 가져오기
-    final now = DateTime.now();
-    final dateString = '${now.year}.${now.month.toString().padLeft(2, '0')}.${now.day.toString().padLeft(2, '0')}';
+    if (_watermarkImage == null) {
+      if (kDebugMode) {
+        print('⚠️ 워터마크 이미지가 로드되지 않았습니다.');
+      }
+      return;
+    }
     
-    // 워터마크 텍스트
-    const watermarkLine1 = '12기 REJOICE - ALL IN';
-    final watermarkLine2 = dateString;
+    // 워터마크 이미지 크기 계산 (원본 비율 유지)
+    final watermarkWidth = _watermarkImage!.width.toDouble();
+    final watermarkHeight = _watermarkImage!.height.toDouble();
     
-    // 텍스트 스타일 설정 (더 큰 크기로 조정, Futura 폰트 사용)
-    final textStyle = ui.TextStyle(
-      color: Colors.black.withValues(alpha: 0.8), // 조금 더 진하게
-      fontSize: width * 0.06, // 캔버스 크기의 6% (기존 3%에서 2배 증가)
-      fontWeight: FontWeight.w500,
-      fontFamily: 'Futura', // Futura 폰트 적용
-    );
+    // 타겟 너비를 캔버스 너비의 40%로 설정
+    final targetWidth = width * 0.4;
+    final scale = targetWidth / watermarkWidth;
+    final targetHeight = watermarkHeight * scale;
     
-    // 첫 번째 줄 텍스트 생성 (중앙 정렬)
-    final paragraphBuilder1 = ui.ParagraphBuilder(ui.ParagraphStyle(
-      textAlign: TextAlign.center, // 중앙 정렬로 변경
-    ))
-      ..pushStyle(textStyle)
-      ..addText(watermarkLine1);
-    final paragraph1 = paragraphBuilder1.build();
-    paragraph1.layout(ui.ParagraphConstraints(width: width * 0.8)); // 최대 너비 80%로 확장
-    
-    // 두 번째 줄 텍스트 생성 (중앙 정렬)
-    final paragraphBuilder2 = ui.ParagraphBuilder(ui.ParagraphStyle(
-      textAlign: TextAlign.center, // 중앙 정렬로 변경
-    ))
-      ..pushStyle(textStyle)
-      ..addText(watermarkLine2);
-    final paragraph2 = paragraphBuilder2.build();
-    paragraph2.layout(ui.ParagraphConstraints(width: width * 0.8)); // 최대 너비 80%로 확장
-    
-    // 중앙 하단 위치 계산 (여백 포함)
-    final margin = width * 0.05; // 5% 여백
-    final line1X = (width - paragraph1.maxIntrinsicWidth) / 2; // 중앙 정렬
-    final line2X = (width - paragraph2.maxIntrinsicWidth) / 2; // 중앙 정렬
-    final line1Y = height - paragraph1.height - paragraph2.height - margin;
-    final line2Y = height - paragraph2.height - margin;
+    // 위치 계산 (중앙 하단)
+    final margin = height * 0.05; // 5% 여백
+    final xPosition = (width - targetWidth) / 2; // 중앙 정렬
+    final yPosition = height - targetHeight - margin; // 하단 여백
     
     // 워터마크 그리기
-    canvas.drawParagraph(paragraph1, Offset(line1X, line1Y));
-    canvas.drawParagraph(paragraph2, Offset(line2X, line2Y));
+    final srcRect = Rect.fromLTWH(0, 0, watermarkWidth, watermarkHeight);
+    final dstRect = Rect.fromLTWH(xPosition, yPosition, targetWidth, targetHeight);
+    
+    // 반투명 효과 적용 (선택사항)
+    final paint = Paint()
+      ..color = Colors.white.withValues(alpha: 0.9); // 90% 불투명도
+    
+    canvas.drawImageRect(_watermarkImage!, srcRect, dstRect, paint);
     
     if (kDebugMode) {
-      print('🏷️ 워터마크 추가됨 (Futura 폰트, 중앙 하단): "$watermarkLine1" / "$watermarkLine2"');
-      print('   위치: (${line1X.toInt()}, ${line1Y.toInt()}) / (${line2X.toInt()}, ${line2Y.toInt()})');
-      print('   폰트 크기: ${(width * 0.06).toInt()}px (캔버스 크기의 6%)');
+      print('🏷️ 워터마크 이미지 추가됨');
+      print('   원본 크기: ${watermarkWidth.toInt()}x${watermarkHeight.toInt()}');
+      print('   표시 크기: ${targetWidth.toInt()}x${targetHeight.toInt()}');
+      print('   위치: (${xPosition.toInt()}, ${yPosition.toInt()})');
+      print('   스케일: ${(scale * 100).toInt()}%');
     }
   }
   

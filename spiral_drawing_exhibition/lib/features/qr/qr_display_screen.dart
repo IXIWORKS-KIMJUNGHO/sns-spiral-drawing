@@ -85,11 +85,18 @@ class _QRDisplayScreenState extends State<QRDisplayScreen>
     // 30초 후 자동으로 카메라 화면으로 돌아가기
     _autoCloseTimer = Timer(const Duration(seconds: 30), () {
       if (mounted) {
-        // onComplete 콜백 실행 또는 카메라 화면으로 직접 이동
+        // onComplete 콜백 실행 또는 카메라 화면으로 복귀
         if (widget.onComplete != null) {
           widget.onComplete!();
         } else {
-          Navigator.of(context).pushNamedAndRemoveUntil('/camera', (route) => false);
+          // 카메라 상태를 보존하면서 복귀
+          // 안전한 방식: QR 화면만 pop하여 이전 화면(카메라)으로 복귀
+          if (Navigator.of(context).canPop()) {
+            Navigator.of(context).pop();
+          } else {
+            // fallback: 카메라 화면으로 직접 이동
+            Navigator.of(context).pushReplacementNamed('/camera');
+          }
         }
       }
     });
@@ -420,7 +427,14 @@ class _QRDisplayScreenState extends State<QRDisplayScreen>
                         if (widget.onComplete != null) {
                           widget.onComplete!();
                         } else {
-                          Navigator.of(context).pushNamedAndRemoveUntil('/camera', (route) => false);
+                          // 카메라 상태를 보존하면서 복귀
+                          // 안전한 방식: QR 화면만 pop하여 이전 화면(카메라)으로 복귀
+                          if (Navigator.of(context).canPop()) {
+                            Navigator.of(context).pop();
+                          } else {
+                            // fallback: 카메라 화면으로 직접 이동
+                            Navigator.of(context).pushReplacementNamed('/camera');
+                          }
                         }
                       },
                       child: Container(
