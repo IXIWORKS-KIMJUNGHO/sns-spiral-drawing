@@ -162,4 +162,7 @@ class NPrinter {
 
     return other.getMacAddress() == _macAddress;
   }
+
+  @override
+  int get hashCode => _macAddress.hashCode;
 }

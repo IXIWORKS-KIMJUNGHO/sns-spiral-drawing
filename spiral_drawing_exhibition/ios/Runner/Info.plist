@@ -55,5 +55,7 @@
 	<string>메모닉 프린터와 연결하기 위해 블루투스를 사용합니다</string>
 	<key>NSBluetoothPeripheralUsageDescription</key>
 	<string>메모닉 프린터와 통신하기 위해 블루투스를 사용합니다</string>
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 </dict>
 </plist>

@@ -7,6 +7,7 @@ import 'features/drawing/drawing_provider.dart';
 import 'features/camera/camera_screen.dart';
 import 'features/setup/setup_screen.dart';
 import 'services/settings_service.dart';
+import 'widgets/loading_video_screen.dart';
 
 /// Flutter 앱의 진입점
 /// 
@@ -93,49 +94,25 @@ class _AppRouterState extends State<AppRouter> {
   
   @override
   Widget build(BuildContext context) {
-    return FutureBuilder<bool>(
-      future: _settingsService.isFirstRun(),
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          // 로딩 화면
-          return const Scaffold(
-            backgroundColor: Colors.white,
-            body: Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Text(
-                    'ALL IN',
-                    style: TextStyle(
-                      fontSize: 32,
-                      fontWeight: FontWeight.bold,
-                      fontFamily: 'Futura',
-                      letterSpacing: 3,
-                    ),
-                  ),
-                  SizedBox(height: 20),
-                  CircularProgressIndicator(),
-                ],
-              ),
-            ),
-          );
-        }
-        
-        if (snapshot.hasError) {
-          // 오류 발생 시 기본적으로 카메라 화면으로
+    return LoadingScreenManager(
+      minimumLoadingTime: const Duration(milliseconds: 2500), // 2.5초 최소 로딩
+      buildNextScreen: () async {
+        // 🔧 디버그 모드에서 설정 테스트를 위해 설정 초기화
+        if (kDebugMode) {
+          await _settingsService.resetSettings();
           if (kDebugMode) {
-            print('❌ 설정 로드 오류: ${snapshot.error}');
+            print('🔄 디버그 모드: 설정이 초기화되어 설정 페이지가 표시됩니다.');
           }
-          return const CameraScreen();
         }
         
-        final isFirstRun = snapshot.data ?? true;
+        // 설정 확인
+        final isFirstRun = await _settingsService.isFirstRun();
         
         if (kDebugMode) {
           print(isFirstRun ? '🆕 첫 실행 - 설정 화면으로 이동' : '🔄 재실행 - 카메라 화면으로 이동');
         }
         
-        // 첫 실행 시 설정 화면, 이후 카메라 화면
+        // 첫 실행 시 설정 화면, 이후 카메라 화면 반환
         return isFirstRun ? const SetupScreen() : const CameraScreen();
       },
     );

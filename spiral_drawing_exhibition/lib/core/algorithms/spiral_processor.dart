@@ -178,8 +178,31 @@ class SpiralProcessor {
     
     // 실제 이미지의 밝기값 가져오기
     // 캔버스 좌표를 정규화된 이미지 좌표로 변환
-    double normalizedX = x / canvasSize.width;
-    double normalizedY = y / canvasSize.height;
+    
+    // 🎯 카메라 화면과 드로잉 화면의 크기 차이를 보정
+    // 카메라에서 보이는 영역이 드로잉 캔버스보다 작기 때문에
+    // 이미지를 중앙 기준으로 약간 축소해서 매핑
+    double centerX = canvasSize.width / 2;
+    double centerY = canvasSize.height / 2;
+    
+    // 중앙으로부터의 거리 계산
+    double offsetX = x - centerX;
+    double offsetY = y - centerY;
+    
+    // 설정값을 이용한 스케일 조정 (카메라 화면에서 실제 보이는 영역에 맞춤)
+    double scaleFactor = config.imageMappingScale;
+    
+    // 스케일링된 좌표 계산
+    double scaledX = centerX + (offsetX * scaleFactor);
+    double scaledY = centerY + (offsetY * scaleFactor);
+    
+    // 정규화된 좌표로 변환
+    double normalizedX = scaledX / canvasSize.width;
+    double normalizedY = scaledY / canvasSize.height;
+    
+    // 범위를 0.0-1.0으로 제한
+    normalizedX = normalizedX.clamp(0.0, 1.0);
+    normalizedY = normalizedY.clamp(0.0, 1.0);
     
     // Processing: brightness(img.get(int(cx), int(cy)))
     // getBrightnessNormalized already returns 0.0-1.0, multiply by 255 for 0-255 range
@@ -188,7 +211,7 @@ class SpiralProcessor {
     // Enhanced debugging - check if we're getting varied brightness values
     if (points.length < 20) {
       if (kDebugMode) {
-        print('Point ${points.length}: pos($x, $y) norm($normalizedX, $normalizedY) -> brightness: $brightness');
+        print('Point ${points.length}: pos($x, $y) scale=${scaleFactor.toStringAsFixed(2)} scaled($scaledX, $scaledY) norm($normalizedX, $normalizedY) -> brightness: $brightness');
       }
       
       // Sample different parts of the image to verify variation

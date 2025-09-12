@@ -10,10 +10,10 @@ import 'dart:async';
 import 'dart:ui' as ui;
 import '../drawing/drawing_provider.dart';
 import '../drawing/spiral_painter.dart';
-import 'camera_selector_dialog.dart';
 import '../qr/qr_display_screen.dart';
 import '../../services/firebase_service.dart';
 import '../../widgets/liquid_glass_settings_button.dart';
+import '../../widgets/upload_loading_screen.dart';
 import '../setup/setup_screen.dart';
 
 /// 카메라 캡처 화면
@@ -105,18 +105,25 @@ class _CameraScreenState extends State<CameraScreen> with SingleTickerProviderSt
         _cameras = await availableCameras();
         if (kDebugMode) { print('카메라 조회 결과: ${_cameras?.length ?? 0}'); }
         
+        // 전면 카메라만 필터링
+        _cameras = _cameras?.where((camera) => 
+          camera.lensDirection == CameraLensDirection.front
+        ).toList();
+        
+        if (kDebugMode) { print('전면 카메라만 필터링: ${_cameras?.length ?? 0}개'); }
+        
       } catch (e) {
         if (kDebugMode) { print('카메라 목록 조회 중 오류: $e'); }
       }
       
       if (_cameras == null || _cameras!.isEmpty) {
-        if (kDebugMode) { print('에러: 카메라를 찾을 수 없습니다'); }
-        _showError('카메라를 찾을 수 없습니다.\n\n가능한 원인:\n1. 카메라 권한이 거부되었습니다\n2. 사용 중인 카메라가 다른 앱에서 점유되었습니다\n\n해결 방법:\n• 시스템 설정 > 개인정보 보호 및 보안 > 카메라에서 앱 권한을 확인하세요\n• 다른 화상통화 앱을 종료하세요');
+        if (kDebugMode) { print('에러: 전면 카메라를 찾을 수 없습니다'); }
+        _showError('전면 카메라를 찾을 수 없습니다.\n\n가능한 원인:\n1. 카메라 권한이 거부되었습니다\n2. 전면 카메라가 없는 디바이스입니다\n3. 사용 중인 카메라가 다른 앱에서 점유되었습니다\n\n해결 방법:\n• 시스템 설정 > 개인정보 보호 및 보안 > 카메라에서 앱 권한을 확인하세요\n• 다른 화상통화 앱을 종료하세요');
         return;
       }
       
-      // 카메라 목록 디버그 출력
-      if (kDebugMode) { print('발견된 카메라 목록:'); }
+      // 전면 카메라 목록 디버그 출력
+      if (kDebugMode) { print('사용 가능한 전면 카메라:'); }
       for (var cam in _cameras!) {
         if (kDebugMode) { print('- 이름: ${cam.name}'); }
         if (kDebugMode) { print('  ID: ${cam.name}'); }
@@ -133,16 +140,8 @@ class _CameraScreenState extends State<CameraScreen> with SingleTickerProviderSt
         _deviceId = _selectedCamera!.name;
         if (kDebugMode) { print('이전 사용 카메라로 복원: ${_selectedCamera!.name}'); }
         await _initializeCameraController();
-      }
-      // 처음 실행이거나 저장된 카메라가 없는 경우
-      else if (_cameras!.length > 1 && mounted) {
-        // 다이얼로그 표시 전 context 체크
-        await Future.delayed(const Duration(milliseconds: 500));
-        if (mounted) {
-          await _showCameraSelector();
-        }
       } else {
-        // 카메라가 하나만 있으면 자동 선택
+        // 전면 카메라가 하나만 있으면 자동 선택 (다이얼로그 표시하지 않음)
         _selectedCamera = _cameras!.first;
         _deviceId = _selectedCamera!.name;
         _lastUsedDeviceId = _deviceId; // 선택한 카메라 저장
@@ -168,27 +167,6 @@ class _CameraScreenState extends State<CameraScreen> with SingleTickerProviderSt
       
       _showError(errorMessage);
     }
-  }
-  
-  /// 카메라 선택 다이얼로그 표시
-  Future<void> _showCameraSelector() async {
-    final selected = await showDialog<CameraDescription>(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => CameraSelectorDialog(cameras: _cameras!),
-    );
-    
-    if (selected != null) {
-      _selectedCamera = selected;
-      _deviceId = selected.name;
-      _lastUsedDeviceId = _deviceId; // 선택한 카메라 저장
-    } else {
-      // 선택하지 않으면 기본 카메라 사용
-      _selectedCamera = _cameras!.first;
-      _deviceId = _selectedCamera!.name;
-      _lastUsedDeviceId = _deviceId; // 선택한 카메라 저장
-    }
-    await _initializeCameraController();
   }
   
   /// 카메라 컨트롤러 초기화
@@ -248,15 +226,6 @@ class _CameraScreenState extends State<CameraScreen> with SingleTickerProviderSt
     }
   }
 
-  /// 카메라 변경
-  Future<void> _changeCamera() async {
-    setState(() {
-      _isInitialized = false;
-    });
-    
-    await _showCameraSelector();
-  }
-  
   /// 셀프 타이머 시작 (5초 카운트다운)
   void _startSelfTimer() {
     if (_controller == null || !_isInitialized || _isTimerActive) {
@@ -361,8 +330,8 @@ class _CameraScreenState extends State<CameraScreen> with SingleTickerProviderSt
       final ui.FrameInfo frameInfo = await codec.getNextFrame();
       final ui.Image originalImage = frameInfo.image;
       
-      // 정사각형으로 크롭 (중앙 부분 추출)
-      final ui.Image croppedImage = await _cropToSquare(originalImage);
+      // 🎯 카메라 프리뷰와 동일한 영역으로 크롭 (OverflowBox 효과 고려)
+      final ui.Image croppedImage = await _cropToMatchCameraPreview(originalImage);
       
       // 🔄 전면 카메라 미러 효과 보정 (좌우 반전)
       final ui.Image correctedImage = await _mirrorImageHorizontally(croppedImage);
@@ -375,11 +344,31 @@ class _CameraScreenState extends State<CameraScreen> with SingleTickerProviderSt
           builder: (context) => DrawingScreenWithImage(
             image: correctedImage,
             userInitiated: _userInitiatedDrawing,
+            onReturnToCamera: _resetToCamera,  // 카메라로 돌아가는 콜백 전달
           ),
         ),
       );
     } catch (e) {
       _showError('이미지 처리 실패: $e');
+    }
+  }
+  
+  /// 카메라 화면으로 돌아가기 (오버레이 숨기기)
+  void _resetToCamera() {
+    if (mounted) {
+      setState(() {
+        _capturedImage = null;
+        _isCapturing = false;
+        _userInitiatedDrawing = false;
+      });
+      
+      // DrawingProvider 초기화
+      final drawingProvider = Provider.of<DrawingProvider>(context, listen: false);
+      drawingProvider.resetAll();
+      
+      if (kDebugMode) {
+        print('📷 카메라 화면으로 복귀: 상태 초기화 완료');
+      }
     }
   }
   
@@ -584,18 +573,6 @@ class _CameraScreenState extends State<CameraScreen> with SingleTickerProviderSt
                         color: Colors.white.withValues(alpha: 0.8),
                       ),
                     ),
-                    if (_selectedCamera != null)
-                      Padding(
-                        padding: EdgeInsets.only(top: squareSize * 0.02),
-                        child: Transform.scale(
-                          scale: squareSize / 1000,  // 기준 크기에 비례하여 스케일 조정
-                          child: CameraInfoWidget(
-                            currentCamera: _selectedCamera,
-                            onChangeCamera: _changeCamera,
-                            zoomLevel: _currentZoomLevel,
-                          ),
-                        ),
-                      ),
                   ],
                 ),
               ),
@@ -973,7 +950,66 @@ class _CameraScreenState extends State<CameraScreen> with SingleTickerProviderSt
     }
   }
   
-  /// 이미지를 정사각형으로 크롭 (중앙 부분 추출)
+  /// 🎯 크롭 없이 원본 이미지 그대로 반환
+  /// 크롭하지 않고 촬영된 이미지를 그대로 사용
+  Future<ui.Image> _cropToMatchCameraPreview(ui.Image image) async {
+    if (kDebugMode) {
+      print('🎯 원본 이미지 그대로 사용 (크롭 없음)');
+      print('이미지 크기: ${image.width}x${image.height}');
+    }
+    
+    // 크롭 없이 원본 이미지 그대로 반환
+    return image;
+  }
+  
+  /// 실제 이미지 크롭을 수행하는 공통 함수
+  Future<ui.Image> _performImageCrop(ui.Image image, int cropX, int cropY, int cropWidth, int cropHeight) async {
+    // 원본 이미지의 픽셀 데이터 가져오기
+    final ByteData? originalData = await image.toByteData(format: ui.ImageByteFormat.rawRgba);
+    if (originalData == null) {
+      if (kDebugMode) { print('❌ 이미지 데이터 가져오기 실패'); }
+      return image;
+    }
+    
+    // 크롭된 이미지용 버퍼 생성
+    final Uint8List croppedPixels = Uint8List(cropWidth * cropHeight * 4);
+    
+    // 크롭 영역 추출
+    for (int row = 0; row < cropHeight; row++) {
+      for (int col = 0; col < cropWidth; col++) {
+        // 원본 이미지에서의 좌표 (경계 체크)
+        final int sourceX = (cropX + col).clamp(0, image.width - 1);
+        final int sourceY = (cropY + row).clamp(0, image.height - 1);
+        
+        // 픽셀 인덱스 계산
+        final int sourceIndex = (sourceY * image.width + sourceX) * 4;
+        final int targetIndex = (row * cropWidth + col) * 4;
+        
+        // RGBA 값 복사
+        croppedPixels[targetIndex] = originalData.getUint8(sourceIndex);     // R
+        croppedPixels[targetIndex + 1] = originalData.getUint8(sourceIndex + 1); // G
+        croppedPixels[targetIndex + 2] = originalData.getUint8(sourceIndex + 2); // B
+        croppedPixels[targetIndex + 3] = originalData.getUint8(sourceIndex + 3); // A
+      }
+    }
+    
+    // 크롭된 이미지 생성
+    final Completer<ui.Image> completer = Completer();
+    ui.decodeImageFromPixels(
+      croppedPixels,
+      cropWidth,
+      cropHeight,
+      ui.PixelFormat.rgba8888,
+      (ui.Image result) {
+        completer.complete(result);
+      },
+    );
+    
+    return completer.future;
+  }
+  
+  /// 기존 정사각형 크롭 함수 (호환성 유지 - 현재 미사용)
+  // ignore: unused_element
   Future<ui.Image> _cropToSquare(ui.Image image) async {
     final int width = image.width;
     final int height = image.height;
@@ -985,51 +1021,11 @@ class _CameraScreenState extends State<CameraScreen> with SingleTickerProviderSt
     final int x = (width - squareSize) ~/ 2;
     final int y = (height - squareSize) ~/ 2;
     
-    if (kDebugMode) { print('Original image: ${width}x$height'); }
-    if (kDebugMode) { print('Cropping to square: ${squareSize}x$squareSize from position ($x, $y)'); }
-    
-    // 원본 이미지의 픽셀 데이터 가져오기
-    final ByteData? originalData = await image.toByteData(format: ui.ImageByteFormat.rawRgba);
-    if (originalData == null) {
-      if (kDebugMode) { print('Failed to get original image data'); }
-      return image;
+    if (kDebugMode) { 
+      print('기존 정사방형 크롭: ${width}x$height → ${squareSize}x$squareSize at ($x, $y)'); 
     }
     
-    // 정사각형 이미지용 버퍼 생성
-    final Uint8List squarePixels = Uint8List(squareSize * squareSize * 4);
-    
-    // 중앙 부분을 정사각형으로 크롭
-    for (int row = 0; row < squareSize; row++) {
-      for (int col = 0; col < squareSize; col++) {
-        // 원본 이미지에서의 좌표
-        final int sourceX = x + col;
-        final int sourceY = y + row;
-        
-        // 픽셀 인덱스 계산
-        final int sourceIndex = (sourceY * width + sourceX) * 4;
-        final int targetIndex = (row * squareSize + col) * 4;
-        
-        // RGBA 값 복사
-        squarePixels[targetIndex] = originalData.getUint8(sourceIndex);     // R
-        squarePixels[targetIndex + 1] = originalData.getUint8(sourceIndex + 1); // G
-        squarePixels[targetIndex + 2] = originalData.getUint8(sourceIndex + 2); // B
-        squarePixels[targetIndex + 3] = originalData.getUint8(sourceIndex + 3); // A
-      }
-    }
-    
-    // 정사각형 이미지 생성
-    final Completer<ui.Image> completer = Completer();
-    ui.decodeImageFromPixels(
-      squarePixels,
-      squareSize,
-      squareSize,
-      ui.PixelFormat.rgba8888,
-      (ui.Image result) {
-        completer.complete(result);
-      },
-    );
-    
-    return completer.future;
+    return _performImageCrop(image, x, y, squareSize, squareSize);
   }
   
   /// 🔄 이미지를 수평으로 뒤집기 (전면 카메라 미러 효과 보정)
@@ -1086,11 +1082,13 @@ class _CameraScreenState extends State<CameraScreen> with SingleTickerProviderSt
 class DrawingScreenWithImage extends StatefulWidget {
   final ui.Image image;
   final bool userInitiated; // 사용자가 직접 시작한 드로잉인지 추적
+  final VoidCallback? onReturnToCamera; // 카메라로 돌아가는 콜백
   
   const DrawingScreenWithImage({
     super.key,
     required this.image,
     this.userInitiated = false,  // 기본값은 false (자동 시작 방지)
+    this.onReturnToCamera,
   });
   
   @override
@@ -1268,98 +1266,156 @@ class _DrawingScreenWithImageState extends State<DrawingScreenWithImage>
         print('✅ 이중 안전장치 통과 - Firebase 업로드 진행');
       }
       
-      if (mounted) {
-        try {
-          // 1. 캔버스를 이미지로 변환
-          final imageBytes = await _captureCanvasAsImage();
-          
-          if (imageBytes != null) {
-            // 2. Firebase에 업로드
-            if (kDebugMode) { print('===== Firebase 상태 체크 ====='); }
-            if (kDebugMode) { print('Firebase 앱 초기화 상태: ${Firebase.apps.isNotEmpty}'); }
-            if (Firebase.apps.isNotEmpty) {
-              if (kDebugMode) { print('Firebase 앱 이름: ${Firebase.apps.first.name}'); }
-              if (kDebugMode) { print('Firebase 프로젝트 ID: ${Firebase.apps.first.options.projectId}'); }
-            }
-            if (kDebugMode) { print('==========================='); }
-            
-            final firebaseService = FirebaseService();
-            if (kDebugMode) { print('FirebaseService 인스턴스 생성 완료'); }
-            
-            final result = await firebaseService.uploadArtwork(imageBytes);
-            if (kDebugMode) { print('uploadArtwork 호출 완료: $result'); }
-            
-            // 3. QR 코드 화면으로 이동 (iPad 안정성 개선)
-            if (mounted) {
-              // 성공적으로 업로드 완료되면 처리 상태 리셋
-              setState(() {
-                _isProcessing = false;
-              });
-              
-              // iPad에서 더 안정적인 네비게이션을 위한 개선
-              // 짧은 지연 후 네비게이션 (사용자 제스처와 충돌 방지)
-              Future.delayed(const Duration(milliseconds: 300), () {
-                if (mounted && context.mounted) { // context.mounted 추가 확인
-                  // pushReplacement 대신 push 사용으로 카메라 상태 보존
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => QRDisplayScreen(
-                        imageUrl: result['url']!,
-                        artworkId: result['artworkId']!,
-                        // onComplete 콜백으로 카메라 복귀 처리
-                        onComplete: () => Navigator.of(context).pop(),
+      try {
+        if (mounted) {
+          // 로딩 화면과 함께 업로드 진행
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => UploadProgressManager(
+                minimumLoadingTime: const Duration(seconds: 2), // 최소 2초 로딩 화면 표시
+                uploadTask: () async {
+                  // 1. 캔버스를 이미지로 변환
+                  final imageBytes = await _captureCanvasAsImage();
+                  
+                  if (imageBytes != null) {
+                    // 2. Firebase에 업로드
+                    if (kDebugMode) { print('===== Firebase 상태 체크 ====='); }
+                    if (kDebugMode) { print('Firebase 앱 초기화 상태: ${Firebase.apps.isNotEmpty}'); }
+                    if (Firebase.apps.isNotEmpty) {
+                      if (kDebugMode) { print('Firebase 앱 이름: ${Firebase.apps.first.name}'); }
+                      if (kDebugMode) { print('Firebase 프로젝트 ID: ${Firebase.apps.first.options.projectId}'); }
+                    }
+                    if (kDebugMode) { print('==========================='); }
+                    
+                    final firebaseService = FirebaseService();
+                    if (kDebugMode) { print('FirebaseService 인스턴스 생성 완료'); }
+                    
+                    final result = await firebaseService.uploadArtwork(imageBytes);
+                    if (kDebugMode) { print('uploadArtwork 호출 완료: $result'); }
+                    
+                    return result;
+                  } else {
+                    throw Exception('이미지 캡처 실패');
+                  }
+                },
+                onUploadComplete: (result) {
+                  if (mounted) {
+                    // 성공적으로 업로드 완료되면 처리 상태 리셋
+                    setState(() {
+                      _isProcessing = false;
+                    });
+                    
+                    // 로딩 화면을 닫고 QR 화면으로 이동
+                    Navigator.of(context).pushReplacement(
+                      MaterialPageRoute(
+                        builder: (_) => QRDisplayScreen(
+                          imageUrl: result['url']!,
+                          artworkId: result['artworkId']!,
+                          // onComplete 콜백으로 카메라 복귀 처리 + 드로잉 상태 초기화
+                          onComplete: () {
+                            // QR 화면에서 popUntil로 모든 화면이 닫혔으므로 상태 초기화만 수행
+                            if (!mounted) return;
+                            
+                            try {
+                              // 저장된 DrawingProvider 참조 사용하여 상태 초기화
+                              if (_drawingProvider != null) {
+                                _drawingProvider!.resetAll();
+                                
+                                if (kDebugMode) {
+                                  print('🔄 카메라로 복귀 완료: DrawingProvider 상태 초기화됨');
+                                  print('📷 모든 오버레이 제거됨 - 카메라 화면 표시 중');
+                                }
+                              }
+                              
+                              // 카메라 상태도 초기화
+                              setState(() {
+                                // 캡처 관련 상태 초기화 (필요시)
+                              });
+                            } catch (e) {
+                              if (kDebugMode) {
+                                print('⚠️ 상태 초기화 중 오류 (무시됨): $e');
+                              }
+                            }
+                          },
+                        ),
+                        settings: const RouteSettings(name: '/qr'),
                       ),
-                      settings: const RouteSettings(name: '/qr'),
-                    ),
-                  );
-                }
-              });
-            }
+                    );
+                  }
+                },
+                onUploadError: (error) {
+                  if (mounted) {
+                    // 에러 발생 시 처리 상태 리셋
+                    setState(() {
+                      _isProcessing = false;
+                    });
+                    
+                    // 로딩 화면을 닫고 에러 표시
+                    Navigator.of(context).pop();
+                    
+                    String errorMessage = 'Firebase 업로드 실패:\n';
+                    if (error.contains('Firebase')) {
+                      errorMessage += '⚠️ Firebase 초기화 문제일 수 있습니다\n';
+                    }
+                    errorMessage += error;
+                    
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(errorMessage),
+                        backgroundColor: Colors.red,
+                        duration: const Duration(seconds: 5),
+                      ),
+                    );
+                  }
+                },
+              ),
+              settings: const RouteSettings(name: '/upload-loading'),
+            ),
+          );
+        }
+      } catch (e, stackTrace) {
+        if (kDebugMode) { print('===== Firebase 오류 상세 정보 ====='); }
+        if (kDebugMode) { print('오류 타입: ${e.runtimeType}'); }
+        if (kDebugMode) { print('오류 메시지: $e'); }
+        if (kDebugMode) { print('스택 트레이스:\n$stackTrace'); }
+        if (kDebugMode) { print('================================='); }
+        
+        // 에러 발생 시에도 처리 상태 리셋
+        _isProcessing = false;
+        
+        // 에러를 화면에 표시 (더 자세한 정보 포함)
+        if (mounted) {
+          String errorMessage = 'Firebase 업로드 실패:\n';
+          if (e.toString().contains('Firebase')) {
+            errorMessage += '⚠️ Firebase 초기화 문제일 수 있습니다\n';
           }
-        } catch (e, stackTrace) {
-          if (kDebugMode) { print('===== Firebase 오류 상세 정보 ====='); }
-          if (kDebugMode) { print('오류 타입: ${e.runtimeType}'); }
-          if (kDebugMode) { print('오류 메시지: $e'); }
-          if (kDebugMode) { print('스택 트레이스:\n$stackTrace'); }
-          if (kDebugMode) { print('================================='); }
+          errorMessage += e.toString();
           
-          // 에러 발생 시에도 처리 상태 리셋
-          _isProcessing = false;
-          
-          // 에러를 화면에 표시 (더 자세한 정보 포함)
+          // Widget 상태 안전성 재확인 후 스낵바 표시 (다음 프레임에서 실행)
           if (mounted) {
-            String errorMessage = 'Firebase 업로드 실패:\n';
-            if (e.toString().contains('Firebase')) {
-              errorMessage += '⚠️ Firebase 초기화 문제일 수 있습니다\n';
-            }
-            errorMessage += e.toString();
-            
-            // Widget 상태 안전성 재확인 후 스낵바 표시 (다음 프레임에서 실행)
-            if (mounted) {
-              SchedulerBinding.instance.addPostFrameCallback((_) {
-                if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text(
-                        errorMessage,
-                        style: const TextStyle(fontSize: 12),
-                      ),
-                      backgroundColor: Colors.red,
-                      duration: const Duration(seconds: 8),
-                    ),
-                  );
-                }
-              });
-            }
-            
-            // 3초 후 카메라로 돌아가기
-            Future.delayed(const Duration(seconds: 3), () {
+            SchedulerBinding.instance.addPostFrameCallback((_) {
               if (mounted) {
-                Navigator.pushReplacementNamed(context, '/camera');
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(
+                      errorMessage,
+                      style: const TextStyle(fontSize: 12),
+                    ),
+                    backgroundColor: Colors.red,
+                    duration: const Duration(seconds: 8),
+                  ),
+                );
               }
             });
           }
+          
+          // 3초 후 카메라로 돌아가기
+          Future.delayed(const Duration(seconds: 3), () {
+            if (mounted) {
+              Navigator.pushReplacementNamed(context, '/camera');
+            }
+          });
         }
       }
     }
@@ -1378,13 +1434,14 @@ class _DrawingScreenWithImageState extends State<DrawingScreenWithImage>
     final watermarkWidth = _watermarkImage!.width.toDouble();
     final watermarkHeight = _watermarkImage!.height.toDouble();
     
-    // 타겟 너비를 캔버스 너비의 40%로 설정
-    final targetWidth = width * 0.4;
+    // 타겟 너비를 캔버스 너비의 100%로 설정
+    // 캔버스 전체 너비에 맞춤
+    final targetWidth = width * 1.0;
     final scale = targetWidth / watermarkWidth;
     final targetHeight = watermarkHeight * scale;
     
     // 위치 계산 (중앙 하단)
-    final margin = height * 0.05; // 5% 여백
+    final margin = height * 0.02; // 2% 여백 (더 아래로 위치)
     final xPosition = (width - targetWidth) / 2; // 중앙 정렬
     final yPosition = height - targetHeight - margin; // 하단 여백
     
@@ -1400,10 +1457,11 @@ class _DrawingScreenWithImageState extends State<DrawingScreenWithImage>
     
     if (kDebugMode) {
       print('🏷️ 워터마크 이미지 추가됨');
-      print('   원본 크기: ${watermarkWidth.toInt()}x${watermarkHeight.toInt()}');
-      print('   표시 크기: ${targetWidth.toInt()}x${targetHeight.toInt()}');
+      print('   캔버스 크기: ${width.toInt()}x${height.toInt()}');
+      print('   워터마크 원본: ${watermarkWidth.toInt()}x${watermarkHeight.toInt()}');
+      print('   워터마크 표시: ${targetWidth.toInt()}x${targetHeight.toInt()}');
       print('   위치: (${xPosition.toInt()}, ${yPosition.toInt()})');
-      print('   스케일: ${(scale * 100).toInt()}%');
+      print('   스케일: ${(scale * 100).toInt()}% (캔버스의 100%)');
     }
   }
   
@@ -1586,7 +1644,14 @@ class _DrawingScreenWithImageState extends State<DrawingScreenWithImage>
                       onTap: () {
                         // 드로잉을 중단하고 카메라 화면으로 돌아가기
                         provider.stopDrawing();
-                        Navigator.pushReplacementNamed(context, '/camera');
+                        
+                        // 오버레이 방식으로 카메라로 돌아가기
+                        if (widget.onReturnToCamera != null) {
+                          Navigator.of(context).pop(); // 드로잉 화면 닫기
+                          widget.onReturnToCamera!(); // 카메라 상태 초기화
+                        } else {
+                          Navigator.pushReplacementNamed(context, '/camera');
+                        }
                       },
                       child: Stack(
                         alignment: Alignment.center,

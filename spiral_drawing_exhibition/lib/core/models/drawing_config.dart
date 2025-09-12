@@ -16,6 +16,9 @@ class DrawingConfig {
   final double radiusIncrement;    // 반경 증가량
   final double degreeIncrement;    // 각도 증가량
   
+  // 이미지 매핑 설정
+  final double imageMappingScale;  // 이미지 매핑 스케일 (카메라/드로잉 크기 보정)
+  
   // 프리셋 이름
   final String presetName;
   
@@ -29,6 +32,7 @@ class DrawingConfig {
     this.initialRadius = 0.2,       // Very small starting point for tight center
     this.radiusIncrement = 0.06,    // Base increment (will be dynamically adjusted)
     this.degreeIncrement = 0.04,    // Base angle (will be dynamically adjusted)
+    this.imageMappingScale = 1.0,  // 새로운 크롭 방식으로 1:1 매핑 가능
     this.presetName = 'default',
   });
   
@@ -44,6 +48,7 @@ class DrawingConfig {
     double? initialRadius,
     double? radiusIncrement,
     double? degreeIncrement,
+    double? imageMappingScale,
     String? presetName,
   }) {
     return DrawingConfig(
@@ -56,6 +61,7 @@ class DrawingConfig {
       initialRadius: initialRadius ?? this.initialRadius,
       radiusIncrement: radiusIncrement ?? this.radiusIncrement,
       degreeIncrement: degreeIncrement ?? this.degreeIncrement,
+      imageMappingScale: imageMappingScale ?? this.imageMappingScale,
       presetName: presetName ?? this.presetName,
     );
   }

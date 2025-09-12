@@ -127,10 +127,13 @@ class _SetupScreenState extends State<SetupScreen> {
   /// 프린터 스캔 중단
   Future<void> _stopScan() async {
     await _printerService.stopPrinterScan();
-    setState(() {
-      _isScanning = false;
-      _scanStatus = _availablePrinters.isEmpty ? '프린터를 찾을 수 없습니다' : '${_availablePrinters.length}개 프린터 발견';
-    });
+    // mounted 체크를 추가하여 disposed 상태에서 setState 호출 방지
+    if (mounted) {
+      setState(() {
+        _isScanning = false;
+        _scanStatus = _availablePrinters.isEmpty ? '프린터를 찾을 수 없습니다' : '${_availablePrinters.length}개 프린터 발견';
+      });
+    }
   }
   
   /// 저장된 드로잉 시간 불러오기
@@ -254,6 +257,36 @@ class _SetupScreenState extends State<SetupScreen> {
     }
   }
   
+  /// 디버그용: 설정 초기화
+  Future<void> _resetSettingsForTesting() async {
+    try {
+      await _settingsService.resetSettings();
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('🔄 설정이 초기화되었습니다. 다음 실행 시 설정 페이지가 다시 나타납니다.'),
+            backgroundColor: Colors.orange,
+            duration: Duration(seconds: 3),
+          ),
+        );
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        print('❌ 설정 초기화 실패: $e');
+      }
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('설정 초기화 실패: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
   /// 설정 완료 및 메인 화면으로 이동
   Future<void> _completeSetup() async {
     if (_selectedCamera == null) {
@@ -588,6 +621,32 @@ class _SetupScreenState extends State<SetupScreen> {
                 ),
               ),
             ),
+            
+            // 디버그 모드에서만 표시: 설정 초기화 버튼
+            if (kDebugMode) ...[
+              const SizedBox(height: 16),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton(
+                  onPressed: _resetSettingsForTesting,
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: Colors.red,
+                    side: const BorderSide(color: Colors.red),
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                  child: const Text(
+                    '🔧 설정 초기화 (디버그용)',
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ),
+              ),
+            ],
           ],
         ),
       ),

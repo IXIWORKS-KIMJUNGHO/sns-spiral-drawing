@@ -45,12 +45,13 @@ dependencies:
   # Toast
   fluttertoast: ^8.2.12
 
+  # Nemonic SDK
+  nemonic_sdk:
+    path: ./nemonic_sdk
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
-
-  nemonic_sdk:
-    path: ./nemonic_sdk
 
   # The "flutter_lints" package below contains a set of recommended lints to
   # encourage good coding practices. The lint set provided by the package is

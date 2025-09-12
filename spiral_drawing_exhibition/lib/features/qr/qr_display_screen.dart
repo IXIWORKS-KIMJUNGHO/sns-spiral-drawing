@@ -85,18 +85,19 @@ class _QRDisplayScreenState extends State<QRDisplayScreen>
     // 30초 후 자동으로 카메라 화면으로 돌아가기
     _autoCloseTimer = Timer(const Duration(seconds: 30), () {
       if (mounted) {
-        // onComplete 콜백 실행 또는 카메라 화면으로 복귀
+        // 타이머 취소하고 navigation 진행
+        _countdownTimer?.cancel();
+        
+        // 모든 오버레이를 제거하고 카메라로 돌아가기 (다음 작품 만들기 버튼과 동일)
+        // QR 화면과 드로잉 화면을 모두 pop
+        Navigator.of(context).popUntil((route) => route.isFirst);
+        
+        // Navigation 완료 후 onComplete 콜백 실행 (상태 초기화용)
         if (widget.onComplete != null) {
-          widget.onComplete!();
-        } else {
-          // 카메라 상태를 보존하면서 복귀
-          // 안전한 방식: QR 화면만 pop하여 이전 화면(카메라)으로 복귀
-          if (Navigator.of(context).canPop()) {
-            Navigator.of(context).pop();
-          } else {
-            // fallback: 카메라 화면으로 직접 이동
-            Navigator.of(context).pushReplacementNamed('/camera');
-          }
+          // 다음 프레임에서 실행하여 안전성 확보
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            widget.onComplete!();
+          });
         }
       }
     });
@@ -423,18 +424,23 @@ class _QRDisplayScreenState extends State<QRDisplayScreen>
                     // 다음 버튼
                     GestureDetector(
                       onTap: () {
+                        // 안전성을 위해 mounted 체크 추가
+                        if (!mounted) return;
+                        
+                        // 타이머들 취소
                         _autoCloseTimer?.cancel();
+                        _countdownTimer?.cancel();
+                        
+                        // 모든 오버레이를 제거하고 카메라로 돌아가기
+                        // QR 화면과 드로잉 화면을 모두 pop
+                        Navigator.of(context).popUntil((route) => route.isFirst);
+                        
+                        // Navigation 완료 후 onComplete 콜백 실행 (상태 초기화용)
                         if (widget.onComplete != null) {
-                          widget.onComplete!();
-                        } else {
-                          // 카메라 상태를 보존하면서 복귀
-                          // 안전한 방식: QR 화면만 pop하여 이전 화면(카메라)으로 복귀
-                          if (Navigator.of(context).canPop()) {
-                            Navigator.of(context).pop();
-                          } else {
-                            // fallback: 카메라 화면으로 직접 이동
-                            Navigator.of(context).pushReplacementNamed('/camera');
-                          }
+                          // 다음 프레임에서 실행하여 안전성 확보
+                          WidgetsBinding.instance.addPostFrameCallback((_) {
+                            widget.onComplete!();
+                          });
                         }
                       },
                       child: Container(
